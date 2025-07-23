@@ -65,9 +65,10 @@ class AuthTokenExtractor:
     
     def __init__(self):
         self.login_url = os.getenv('AUTH0_LOGIN_URL')
-        self.username = "Arun.p"
+        self.username = os.getenv('USERNAME_1')
         logger.debug("Loaded username from .env: '%s'", self.username)
-        self.password = "$harp123"
+        # self.password = "$harp123"
+        self.password = os.getenv('PASSWORD_1')
         logger.debug("Loaded password from .env: '%s'", self.password)
         self.api_base_url = os.getenv('API_BASE_URL')
         self.tenant_endpoint = os.getenv('TENANT_LIST_ENDPOINT')
@@ -77,15 +78,6 @@ class AuthTokenExtractor:
         # Debug: Print loaded credentials (removed emoji)
         logger.debug("Loaded username from .env: '%s'", self.username)
         logger.debug("Loaded password from .env: '%s'", self.password)
-        
-        # Ensure we have the correct credentials
-        if not self.username:
-            logger.warning("Username not properly loaded from .env, using fallback")
-            self.username = "Arun.p"
-        
-        if not self.password:
-            logger.warning("Password not properly loaded from .env, using fallback") 
-            self.password = "$harp123"
         
         # Timeouts
         print("DASHBOARD_TIMEOUT:", os.getenv('DASHBOARD_TIMEOUT', 40000))
