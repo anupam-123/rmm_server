@@ -14,6 +14,7 @@ import requests
 from dotenv import load_dotenv
 import logging
 
+
 # Configure root logger for this module
 logging.basicConfig(
     level=logging.INFO,
@@ -24,13 +25,50 @@ logger = logging.getLogger(__name__)
 # Load environment variables
 load_dotenv()
 
+def is_jwt_expired(token: str) -> bool:
+    """Check if a JWT token is expired."""
+    import base64
+    import time
+    try:
+        payload = token.split('.')[1]
+        # Pad base64 string
+        padding = '=' * (-len(payload) % 4)
+        payload += padding
+        decoded = base64.urlsafe_b64decode(payload)
+        import json
+        payload_json = json.loads(decoded)
+        exp = payload_json.get('exp')
+        if exp is None:
+            return True
+        now = int(time.time())
+        return now >= exp
+    except Exception as e:
+        return True
+
+def get_stored_token(token_file: str) -> str:
+    """Read the JWT token from the token file if it exists and is valid."""
+    import os
+    if not os.path.exists(token_file):
+        return None
+    try:
+        with open(token_file, 'r') as f:
+            data = json.load(f)
+            token = data.get('token_extraction', {}).get('token')
+            if token:
+                return token
+    except Exception:
+        return None
+    return None
+
 class AuthTokenExtractor:
     """Handles Auth0 authentication flow and JWT token extraction."""
     
     def __init__(self):
         self.login_url = os.getenv('AUTH0_LOGIN_URL')
-        self.username = os.getenv('USERNAME')
-        self.password = os.getenv('PASSWORD')
+        self.username = "Arun.p"
+        logger.debug("Loaded username from .env: '%s'", self.username)
+        self.password = "$harp123"
+        logger.debug("Loaded password from .env: '%s'", self.password)
         self.api_base_url = os.getenv('API_BASE_URL')
         self.tenant_endpoint = os.getenv('TENANT_LIST_ENDPOINT')
         self.api_url = f"{self.api_base_url}{self.tenant_endpoint}"
@@ -41,7 +79,7 @@ class AuthTokenExtractor:
         logger.debug("Loaded password from .env: '%s'", self.password)
         
         # Ensure we have the correct credentials
-        if not self.username or self.username == 'nanupam':
+        if not self.username:
             logger.warning("Username not properly loaded from .env, using fallback")
             self.username = "Arun.p"
         
@@ -138,13 +176,6 @@ class AuthTokenExtractor:
                 self.intercepted_token = auth_header.replace('Bearer ', '')
                 logger.info(f"Token intercepted from response ({response.url}): {self.intercepted_token[:50]}...")
             
-            # Check for tokens in response URLs
-            if 'access_token=' in response.url and not self.intercepted_token:
-                token_match = re.search(r'access_token=([^&]+)', response.url)
-                if token_match:
-                    self.intercepted_token = token_match.group(1)
-                    logger.info(f"Token found in response URL: {self.intercepted_token[:50]}...")
-
         page.on('request', handle_request)
         page.on('response', handle_response)
 
@@ -204,11 +235,11 @@ class AuthTokenExtractor:
         """Handle Auth0 login form."""
         logger.info("Step 2: Handling Auth0 login form...")
         await page.wait_for_timeout(3000)
-        
+        logger.info("self.username: %s", self.username)
         # Fill email field
         if not await self._fill_element(page, self.selectors['auth0_email'], self.username, "Email"):
             if not await self._try_selectors(page, self.selectors['auth0_email_fallback'], 
-                                           "fill", value=self.username, field_name="Email"):
+                                        "fill", value=self.username, field_name="Email"):
                 await page.screenshot(path='debug_auth0_form.png')
                 return False
         
@@ -285,9 +316,9 @@ class AuthTokenExtractor:
         logger.info(f"Step 5: Waiting for dashboard redirect ({self.dashboard_timeout/1000} second timeout)...")
         try:
             await page.wait_for_url(['**/callback*', '**/dashboard*', '**/manage*', '*smartoffice*'], 
-                                  timeout=self.dashboard_timeout)
+                                timeout=self.dashboard_timeout)
         except:
-            await page.wait_for_timeout(10000)
+            await page.wait_for_timeout(50000)
             current_url = page.url
             logger.info(f"Current URL after timeout: {current_url}")
             if 'auth0.com' in current_url:
@@ -384,7 +415,7 @@ class AuthTokenExtractor:
         for nav_url in navigation_urls:
             try:
                 logger.info(f"Navigating to {nav_url}...")
-                await page.goto(nav_url, wait_until='networkidle', timeout=10000)
+                await page.goto(nav_url, wait_until='networkidle', timeout=40000)
                 await page.wait_for_timeout(5000)
                 if self.intercepted_token:
                     return True
@@ -406,10 +437,10 @@ class AuthTokenExtractor:
     async def login_and_extract_token(self) -> Dict:
         """Main login and token extraction method."""
         async with async_playwright() as p:
-            browser = await p.chromium.launch(
+            browser = await p.firefox.launch(
                 headless=self.headless,
                 slow_mo=self.slow_mo,
-                args=['--disable-web-security', '--disable-features=VizDisplayCompositor']
+                args=['--disable-web-security']
             )
             
             try:
@@ -613,42 +644,6 @@ async def main():
     extractor = AuthTokenExtractor()
     result = await extractor.run()
     return result
-
-
-def is_jwt_expired(token: str) -> bool:
-    """Check if a JWT token is expired."""
-    import base64
-    import time
-    try:
-        payload = token.split('.')[1]
-        # Pad base64 string
-        padding = '=' * (-len(payload) % 4)
-        payload += padding
-        decoded = base64.urlsafe_b64decode(payload)
-        import json
-        payload_json = json.loads(decoded)
-        exp = payload_json.get('exp')
-        if exp is None:
-            return True
-        now = int(time.time())
-        return now >= exp
-    except Exception as e:
-        return True
-
-def get_stored_token(token_file: str) -> str:
-    """Read the JWT token from the token file if it exists and is valid."""
-    import os
-    if not os.path.exists(token_file):
-        return None
-    try:
-        with open(token_file, 'r') as f:
-            data = json.load(f)
-            token = data.get('token_extraction', {}).get('token')
-            if token:
-                return token
-    except Exception:
-        return None
-    return None
 
 if __name__ == "__main__":
     token_file = os.getenv('TOKEN_FILE', 'auth_token.json')
