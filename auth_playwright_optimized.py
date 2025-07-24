@@ -66,13 +66,10 @@ class AuthTokenExtractor:
     def __init__(self):
         self.login_url = os.getenv('AUTH0_LOGIN_URL')
         self.username = os.getenv('USERNAME_1')
-        logger.debug("Loaded username from .env: '%s'", self.username)
-        # self.password = "$harp123"
         self.password = os.getenv('PASSWORD_1')
-        logger.debug("Loaded password from .env: '%s'", self.password)
         self.api_base_url = os.getenv('API_BASE_URL')
         self.tenant_endpoint = os.getenv('TENANT_LIST_ENDPOINT')
-        self.api_url = f"{self.api_base_url}{self.tenant_endpoint}"
+        self.api_url = f"{self.api_base_url}/{self.tenant_endpoint}"
         self.token_file = Path(os.getenv('TOKEN_FILE', 'auth_token.json'))
         
         # Debug: Print loaded credentials (removed emoji)
@@ -173,6 +170,8 @@ class AuthTokenExtractor:
 
     async def _fill_element(self, page: Page, selector: str, value: str, field_name: str) -> bool:
         """Fill a form element with value."""
+
+        logger.info(f' API url: {self.api_url}')
         try:
             await page.wait_for_selector(selector, state='visible', timeout=self.element_timeout)
             await page.fill(selector, value)
