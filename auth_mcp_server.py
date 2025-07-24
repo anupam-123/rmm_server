@@ -205,14 +205,13 @@ async def make_api_request(endpoint: str, method: str = "GET", data: Optional[Di
     If the token is missing or expired, automatically extract a new one.
     """
     token = await _get_valid_token()
+    URL = "https://dev7-cloudrmm-api.sharpb2bcloud.com"
     if not token:
         return {
             "success": False,
             "error": "No valid token found or failed to extract token."
         }
-    URL = "https://dev7-cloudrmm-api.sharpb2bcloud.com"
     headers = _prepare_headers(token)
-    logging.info("Making API request to %s with headers: %s", endpoint, headers)
     try:
         if method.upper() == "GET":
             response = requests.get(f"{URL}{endpoint}", headers=headers, timeout=30)
