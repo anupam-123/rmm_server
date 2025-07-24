@@ -17,6 +17,7 @@ from auth_playwright_optimized import AuthTokenExtractor, is_jwt_expired
 
 
 from fastmcp import FastMCP
+from fastmcp.client.auth import BearerAuth
 # Import AuthTokenExtractor lazily to avoid initialization issues
 # from .auth_playwright_optimized import AuthTokenExtractor
 
@@ -44,15 +45,16 @@ class TokenManager:
         if self.extractor is None:
             self.extractor = AuthTokenExtractor()
         return self.extractor
-    
-    def load_token_data(self) -> Optional[Dict[str, Any]]:
+
+    async def load_token_data(self) -> Optional[Dict[str, Any]]:
         """Load token data from JSON file"""
         if os.path.exists(self.token_file):
             if not is_jwt_expired(self.token_file):
-                result = self.run_playwright_token_extraction()
+                self.run_playwright_token_extraction()
             try:
-                with open(self.token_file, 'r') as f:
-                    return json.load(f)
+                import aiofiles
+                async with aiofiles.open(self.token_file, 'r') as f:
+                    return json.loads(await f.read())
             except (json.JSONDecodeError, IOError) as e:
                 return {"error": f"Failed to load token data: {e}"}
         return None
@@ -66,59 +68,47 @@ class TokenManager:
         except IOError as e:
             return {"success": False, "error": f"Failed to save token data: {e}"}
     
-    import sys
-    
-    def run_playwright_token_extraction(
+    # import sys
+
+    async def run_playwright_token_extraction(
         self,
-        script_path: str = "D:\\AI\\rmm_mcp_server\\auth_playwright_optimized.py",
-        cwd: str = "D:\\AI\\rmm_mcp_server",
-        timeout = 20
-        ) -> Dict[str, Any]:
+    ) -> Dict[str, Any]:
         """
         Run the Playwright token extraction script as a subprocess.
 
         Args:
-            script_path: Path to the Playwright extraction script.
-            cwd: Working directory for the subprocess.
+            script_path: Path to the Playwright extraction script. If None, uses the default in the same directory.
+            cwd: Working directory for the subprocess. If None, uses the current working directory.
             timeout: Timeout in seconds for the subprocess.
 
         Returns:
             Dict containing stdout, stderr, return code, and success status.
         """
         logger = logging.getLogger(__name__)
-        logger.debug(f"Running Playwright script: {script_path}")
+        # Auto-fetch script_path and cwd if not provided
 
         try:
-            result = subprocess.run(
-                ["uv", "run", "python", script_path],
-                shell=True,
-                cwd=cwd,
-                text=True,
-                timeout=timeout,
-                capture_output=True
-            )
+            result = await self.get_extractor().run()
+            logger.info(f"Playwright token extraction result: {result}")
+            if result.get("success"):
+                logger.info("Playwright token extraction completed successfully.")
+            else:
+                logger.warning("Playwright token extraction failed.")
 
-            if result.stdout:
-                print(result.stdout)
-                logger.debug(f"Subprocess stdout: {result.stdout.strip()}")
-            if result.stderr:
-                print(result.stderr)
-                logger.warning(f"Subprocess stderr: {result.stderr.strip()}")
-
-            logger.info(f"Subprocess exit code: {result.returncode}")
+            logger.info(f"Api test result: {result.get('api_test')}")
 
             return {
-                "success": result.returncode == 0,
-                "stdout": result.stdout,
-                "stderr": result.stderr,
-                "returncode": result.returncode
+                "success": result.get("success"),
+                "token": result.get("token"),
+                "message": "Token extraction completed successfully.",
+                "retrieved_at": datetime.now().isoformat()
             }
         except Exception as e:
             logger.exception("Unexpected error during Playwright token extraction")
             error_data = {
-            "success": False,
-            "error": str(e),
-            "extracted_at": datetime.now().isoformat()
+                "success": False,
+                "error": str(e),
+                "extracted_at": datetime.now().isoformat()
             }
             self.save_token_data(error_data)
             return error_data
@@ -128,20 +118,17 @@ class TokenManager:
 token_manager = TokenManager()
 
 @mcp.tool
-def extract_auth_token() -> Dict[str, Any]:
+async def extract_auth_token() -> Dict[str, Any]:
     """
     Extract JWT token from Auth0 authentication using Playwright automation.
     Only runs extraction if token is missing or expired.
     """
     # 1. Try to load stored token
-    token_data = token_manager.load_token_data() or {}
-    extraction_result = token_data.get("token_extraction") \
-                     or token_data.get("extraction_result") \
-                     or {}
-    token = extraction_result.get("token") if isinstance(extraction_result, dict) else None
+    token_data = await token_manager.load_token_data() or {}
+    token = token_data.token_extraction.get("token") or {}
 
     # 2. Check if token exists and is not expired
-    logger.debug(f"Loaded token data: {token}")
+    logger.debug(f"Loaded token data: {token_data}")
     if token and not is_jwt_expired(token):
         return {
             "success": True,
@@ -151,126 +138,15 @@ def extract_auth_token() -> Dict[str, Any]:
         }
 
     logger.info("No valid token found or token is expired. Running Playwright extraction...")
-    # 3. If missing or expired, run Playwright extraction as before
-    result = token_manager.run_playwright_token_extraction()
+    result = await token_manager.run_playwright_token_extraction()
+    logging.info(f"Playwright extraction result: {result}")
+    return result
 
-    if result.get("success"):
-        token_data = token_manager.load_token_data()
-        if token_data and "extraction_result" in token_data:
-            extraction_result = token_data["extraction_result"]
-            return {
-                "success": extraction_result.get("success", False),
-                "token": extraction_result.get("token"),
-                "api_test": extraction_result.get("api_test"),
-                "message": "Token extraction completed via subprocess",
-                "subprocess_output": result.get("stdout")
-            }
-        else:
-            return {
-                "success": "Token extracted successfully" in result.get("stdout", ""),
-                "message": "Token extraction completed via subprocess",
-                "subprocess_output": result.get("stdout"),
-                "subprocess_error": result.get("stderr")
-            }
-    else:
-        return {
-            "success": False,
-            "error": f"Subprocess failed with return code {result.get('returncode')}",
-            "subprocess_output": result.get("stdout"),
-            "subprocess_error": result.get("stderr"),
-            "extracted_at": datetime.now().isoformat()
-        }
-
-@mcp.tool
-def get_or_extract_token() -> Dict[str, Any]:
-    """
-    Returns a valid JWT token if available, otherwise extracts a new token using Playwright.
-    """
-    # Try to load stored token data
-    token_data = token_manager.load_token_data() or {}
-    extraction_result = token_data.get("token_extraction") \
-                     or token_data.get("extraction_result") \
-                     or {}
-    token = extraction_result.get("token") if isinstance(extraction_result, dict) else None
-
-    # Check if token exists and is not expired
-    if token and not is_jwt_expired(token):
-        return {
-            "success": True,
-            "token": token,
-            "message": "Valid JWT token found. Skipping extraction.",
-            "retrieved_at": datetime.now().isoformat()
-        }
-
-    # If missing or expired, run Playwright extraction
-    result = token_manager.run_playwright_token_extraction()
-    if result.get("success"):
-        # Reload token data after extraction
-        token_data = token_manager.load_token_data() or {}
-        extraction_result = token_data.get("token_extraction") \
-                         or token_data.get("extraction_result") \
-                         or {}
-        token = extraction_result.get("token") if isinstance(extraction_result, dict) else None
-        return {
-            "success": bool(token),
-            "token": token,
-            "message": "Token extracted via Playwright.",
-            "subprocess_output": result.get("stdout"),
-            "retrieved_at": datetime.now().isoformat()
-        }
-    else:
-        return {
-            "success": False,
-            "error": "Failed to extract token via Playwright.",
-            "subprocess_output": result.get("stdout"),
-            "subprocess_error": result.get("stderr"),
-            "retrieved_at": datetime.now().isoformat()
-        }
-        
-@mcp.tool
-def test_api_with_stored_token() -> Dict[str, Any]:
-    """
-    Test the Sharp B2B Cloud API using the stored JWT token.
-    
-    Makes a request to the tenantList API endpoint using the stored token
-    and returns the response data.
-    
-    Returns:
-        Dict containing API response data and status
-    """
-    # Get stored token
-    token_data = token_manager.load_token_data()
-    
-    if not token_data:
-        return {
-            "success": False,
-            "error": "No token data found. Run extract_auth_token first."
-        }
-    
-    # Extract token from stored data
-    extraction_result = token_data.get("extraction_result", {})
-    token = extraction_result.get("token")
-    
-    if not token:
-        return {
-            "success": False,
-            "error": "No valid token found in stored data."
-        }
-    
-    # Test API with token
-    api_result = token_manager.extractor.test_api_with_token(token)
-    
-    # Update stored data with new API test result
-    token_data["latest_api_test"] = api_result
-    token_manager.save_token_data(token_data)
-    
-    return api_result
-
-def _get_valid_token() -> Optional[str]:
+async def _get_valid_token() -> Optional[str]:
     """
     Retrieve a valid JWT token from storage, or extract a new one if missing/expired.
     """
-    token_data = token_manager.load_token_data() or {}
+    token_data = await token_manager.load_token_data() or {}
     extraction_result = token_data.get("token_extraction") or token_data.get("extraction_result") or {}
     token = extraction_result.get("token") if isinstance(extraction_result, dict) else None
 
@@ -278,9 +154,9 @@ def _get_valid_token() -> Optional[str]:
         return token
 
     # Token missing or expired, extract new token
-    extraction = token_manager.run_playwright_token_extraction()
-    if extraction.get("success"):
-        token_data = token_manager.load_token_data() or {}
+    extraction = await token_manager.run_playwright_token_extraction()
+    if await extraction.get("success"):
+        token_data = await token_manager.load_token_data() or {}
         extraction_result = token_data.get("token_extraction") or token_data.get("extraction_result") or {}
         token = extraction_result.get("token") if isinstance(extraction_result, dict) else None
         if token and not is_jwt_expired(token):
@@ -299,14 +175,14 @@ def _prepare_headers(token: str) -> Dict[str, str]:
         'origin': 'https://dev7-smartoffice.sharpb2bcloud.com',
         'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36',
         'x-time-zone': '+05:30',
-        "ocp-apim-subscription-key":"2c2f0a40f9fc4ceb957a12a3856160f2" 
+        "ocp-apim-subscription-key": os.getenv("OCP_APIM_SUBSCRIPTION_KEY")
     }
 
-def _handle_response(response, endpoint: str, method: str) -> Dict[str, Any]:
+async def _handle_response(response, endpoint: str, method: str) -> Dict[str, Any]:
     """
     Handle the API response and log the call.
     """
-    token_data = token_manager.load_token_data()  or {}
+    token_data = await token_manager.load_token_data()  or {}
     try:
         response_data = response.json()
     except Exception:
@@ -328,12 +204,12 @@ def _handle_response(response, endpoint: str, method: str) -> Dict[str, Any]:
     return result
 
 @mcp.tool
-def make_api_request(endpoint: str, method: str = "GET", data: Optional[Dict] = None) -> Dict[str, Any]:
+async def make_api_request(endpoint: str, method: str = "GET", data: Optional[Dict] = None) -> Dict[str, Any]:
     """
     Make a custom API request using the stored JWT token.
     If the token is missing or expired, automatically extract a new one.
     """
-    token = _get_valid_token()
+    token = await _get_valid_token()
     if not token:
         return {
             "success": False,
@@ -356,9 +232,9 @@ def make_api_request(endpoint: str, method: str = "GET", data: Optional[Dict] = 
                 "success": False,
                 "error": f"Unsupported HTTP method: {method}"
             }
-        return _handle_response(response, endpoint, method)
+        return await _handle_response(response, endpoint, method)
     except Exception as e:
-        token_data = token_manager.load_token_data()  or {}
+        token_data = await token_manager.load_token_data()  or {}
         error_result = {
             "success": False,
             "error": str(e),
@@ -369,7 +245,7 @@ def make_api_request(endpoint: str, method: str = "GET", data: Optional[Dict] = 
         api_log = token_data.get("api_calls", [])
         api_log.append(error_result)
         token_data["api_calls"] = api_log[-10:]
-        token_manager.save_token_data(token_data)
+        # token_manager.save_token_data(token_data)
         return error_result
 @mcp.tool
 def get_api_call_history() -> Dict[str, Any]:
@@ -440,12 +316,10 @@ __all__ = [
     "TokenManager",
     "token_manager",
     "extract_auth_token",
-    "test_api_with_stored_token",
     "make_api_request",
     "get_api_call_history",
     "clear_token_data",
     "get_token_file",
-    "get_or_extract_token"
 ]
 
 
