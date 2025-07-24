@@ -3,12 +3,9 @@ FastMCP 2.0 server for Auth0 JWT token management.
 Provides tools for extracting and managing JWT tokens from Auth0 authentication.
 """
 
-import asyncio
 import json
 import logging
 import os
-import subprocess
-import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, Optional
@@ -67,8 +64,6 @@ class TokenManager:
             return {"success": True, "message": "Token data saved successfully"}
         except IOError as e:
             return {"success": False, "error": f"Failed to save token data: {e}"}
-    
-    # import sys
 
     async def run_playwright_token_extraction(
         self,
@@ -155,7 +150,7 @@ async def _get_valid_token() -> Optional[str]:
 
     # Token missing or expired, extract new token
     extraction = await token_manager.run_playwright_token_extraction()
-    if await extraction.get("success"):
+    if extraction.get("success"):
         token_data = await token_manager.load_token_data() or {}
         extraction_result = token_data.get("token_extraction") or token_data.get("extraction_result") or {}
         token = extraction_result.get("token") if isinstance(extraction_result, dict) else None
@@ -215,18 +210,18 @@ async def make_api_request(endpoint: str, method: str = "GET", data: Optional[Di
             "success": False,
             "error": "No valid token found or failed to extract token."
         }
-
+    URL = "https://dev7-cloudrmm-api.sharpb2bcloud.com"
     headers = _prepare_headers(token)
-
+    logging.info("Making API request to %s with headers: %s", endpoint, headers)
     try:
         if method.upper() == "GET":
-            response = requests.get(endpoint, headers=headers, timeout=30)
+            response = requests.get(f"{URL}{endpoint}", headers=headers, timeout=30)
         elif method.upper() == "POST":
-            response = requests.post(endpoint, headers=headers, json=data, timeout=30)
+            response = requests.post(f"{URL}{endpoint}", headers=headers, json=data, timeout=30)
         elif method.upper() == "PUT":
-            response = requests.put(endpoint, headers=headers, json=data, timeout=30)
+            response = requests.put(f"{URL}{endpoint}", headers=headers, json=data, timeout=30)
         elif method.upper() == "DELETE":
-            response = requests.delete(endpoint, headers=headers, timeout=30)
+            response = requests.delete(f"{URL}{endpoint}", headers=headers, timeout=30)
         else:
             return {
                 "success": False,
@@ -247,52 +242,6 @@ async def make_api_request(endpoint: str, method: str = "GET", data: Optional[Di
         token_data["api_calls"] = api_log[-10:]
         # token_manager.save_token_data(token_data)
         return error_result
-@mcp.tool
-def get_api_call_history() -> Dict[str, Any]:
-    """
-    Retrieve the history of API calls made using the stored token.
-    
-    Returns:
-        Dict containing the last 10 API calls and their results
-    """
-    token_data = token_manager.load_token_data() 
-    
-    if not token_data:
-        return {
-            "success": False,
-            "error": "No token data found."
-        }
-    
-    api_calls = token_data.get("api_calls", [])
-    
-    return {
-        "success": True,
-        "total_calls": len(api_calls),
-        "recent_calls": api_calls,
-        "retrieved_at": datetime.now().isoformat()
-    }
-
-@mcp.tool
-def clear_token_data() -> Dict[str, Any]:
-    """
-    Clear all stored token data and API call history.
-    
-    Returns:
-        Dict containing success status
-    """
-    try:
-        if token_manager.token_file.exists():
-            token_manager.token_file.unlink()
-        
-        return {
-            "success": True,
-            "message": "Token data cleared successfully"
-        }
-    except Exception as e:
-        return {
-            "success": False,
-            "error": f"Failed to clear token data: {e}"
-        }
 
 # Add a resource for the token file
 @mcp.resource(uri="file://auth_token.json")
@@ -317,8 +266,6 @@ __all__ = [
     "token_manager",
     "extract_auth_token",
     "make_api_request",
-    "get_api_call_history",
-    "clear_token_data",
     "get_token_file",
 ]
 
