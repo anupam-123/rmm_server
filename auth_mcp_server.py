@@ -712,6 +712,12 @@ async def schedule_firmware_update(
         timezone (str): Timezone for the transfer (default: "UTC+05:30")
         group_id (Optional[str]): Group ID. If None, extracts from JWT token
     
+    Note:
+        - Before directly scheduling ask the user if they want to schedule a firmware update.
+            If the user confirms, proceed with the scheduling.
+        - Validate all inputs including device IDs, firmware file ID, and datetime formats.
+        - Ask user which staged firmware file to use if multiple are available.
+
     Returns:
         Dict containing scheduling result and validation details
     """
@@ -948,6 +954,7 @@ def get_token_file() -> str:
     return json.dumps({"message": "No token data available"}, indent=2)
 
 
+
 # Export for importable MCP server
 __all__ = [
     "mcp",
@@ -962,19 +969,3 @@ __all__ = [
     "cancel_scheduled_update",
     "get_token_file",
 ]
-
-
-
-# {
-#   "SharpAuthServer": {
-#     "command": "uv",
-#     "args": [
-#       "run",
-#       "--with",
-#       "fastmcp",
-#       "fastmcp",
-#       "run",
-#       "D:\\AI\\rmm_mcp_server\\server.py:mcp"
-#     ]
-#   }
-# }

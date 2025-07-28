@@ -7,6 +7,6 @@ from auth_mcp_server import mcp
 
 def run():
     """Run the MCP server."""
-    mcp.run(transport="stdio")
+    mcp.run(transport="sse")
 if __name__ == "__main__":
     run()
