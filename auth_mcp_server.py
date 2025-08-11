@@ -708,7 +708,7 @@ async def schedule_firmware_update(
         device_ids (List[str]): Array of target device IDs to update
         firmware_file_id (str): ID of the staged firmware file to deploy
         transfer_datetime (int): Unix timestamp (milliseconds) when to transfer firmware to device
-        execute_datetime (str): When to execute update (format: "YYYYMMDDHHDD")
+        execute_datetime (str): When to execute update (format: "YYYYMMDDHHMM")
         timezone (str): Timezone for the transfer (default: "UTC+05:30")
         group_id (Optional[str]): Group ID. If None, extracts from JWT token
     
@@ -743,12 +743,12 @@ async def schedule_firmware_update(
             "error": f"Invalid firmware file ID format: {firmware_file_id}. Expected UUID format."
         }
     
-    # Validate execute_datetime format (YYYYMMDDHHDD)
+    # Validate execute_datetime format (YYYYMMDDHHMM)
     datetime_pattern = r'^\d{12}$'
     if not re.match(datetime_pattern, execute_datetime):
         return {
             "success": False,
-            "error": f"Invalid execute_datetime format: {execute_datetime}. Expected format: YYYYMMDDHHDD"
+            "error": f"Invalid execute_datetime format: {execute_datetime}. Expected format: YYYYMMDDHHMM"
         }
     
     # Validate transfer_datetime is in the future
