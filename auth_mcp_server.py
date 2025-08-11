@@ -10,7 +10,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 import requests
-from auth_playwright_optimized import AuthTokenExtractor, is_jwt_expired
+from auth_playwright import AuthTokenExtractor, is_jwt_expired
 import jwt
 
 from pydantic import BaseModel
@@ -417,7 +417,7 @@ async def list_devices(
         method="POST",
         payload=payload
     )
-    logger.info(f"API result: {api_result}")
+    # logger.info(f"API result: {api_result}")
     if not api_result.get("success"):
         return {
             "success": False,
