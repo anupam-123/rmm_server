@@ -623,10 +623,6 @@ docker run -p 8000:8000 --env-file .env mcp-rmm
 - Write unit tests for new features
 - Update documentation for API changes
 
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
 ## 🔗 Links
 
 - **Repository**: [https://github.com/anupam-123/AI--based-firmware-upgradation-system](https://github.com/anupam-123/AI--based-firmware-upgradation-system)
