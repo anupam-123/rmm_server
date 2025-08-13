@@ -3,7 +3,6 @@
 [![Python](https://img.shields.io/badge/Python-3.11%2B-blue)](https://www.python.org/)
 [![FastMCP](https://img.shields.io/badge/FastMCP-2.0-green)](https://github.com/jlowin/fastmcp)
 [![Playwright](https://img.shields.io/badge/Playwright-1.40%2B-orange)](https://playwright.dev/)
-[![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
 
 > **MCP Remote Management Module** - A sophisticated AI-powered firmware management system that automates Auth0 JWT token extraction and provides comprehensive device management capabilities for Sharp MFP devices.
 
